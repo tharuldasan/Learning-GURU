@@ -447,24 +447,21 @@
                 const landmarks = results.faceLandmarks[0];
                 const blendshapes = results.faceBlendshapes[0].categories;
 
-                // 1. CALCULATE STRUCTURAL DISTANCE WITHIN EYELIDS (Euclidean Formula)
-                // Left Eyelid: Top (Landmark 159), Bottom (Landmark 145)
+                // 1. CALCULATE STRUCTURAL DISTANCE WITHIN EYELIDS
                 const leftTop = landmarks[159];
                 const leftBot = landmarks[145];
-                const leftDistance = Math.sqrt(Math.pow(leftTop.x - leftBot.x, 2) + Math.pow(leftTop.y - leftBot.y, 2)) * 100; // Multiplied to normalize into display metrics
+                const leftDistance = Math.sqrt(Math.pow(leftTop.x - leftBot.x, 2) + Math.pow(leftTop.y - leftBot.y, 2)) * 100;
 
-                // Right Eyelid: Top (Landmark 386), Bottom (Landmark 374)
                 const rightTop = landmarks[386];
                 const rightBot = landmarks[374];
                 const rightDistance = Math.sqrt(Math.pow(rightTop.x - rightBot.x, 2) + Math.pow(rightTop.y - rightBot.y, 2)) * 100;
 
-                // Render Eyelid Measurements and Visual Graphs
                 leftApertureVal.innerText = `${leftDistance.toFixed(2)} mm`;
                 rightApertureVal.innerText = `${rightDistance.toFixed(2)} mm`;
                 leftBar.style.width = `${Math.min(leftDistance * 25, 100)}%`;
                 rightBar.style.width = `${Math.min(rightDistance * 25, 100)}%`;
 
-                // 2. MONITOR MAIN PERSON VELOCITY DELTA (Nose Vector Tracking)
+                // 2. MONITOR MAIN PERSON VELOCITY DELTA
                 const nose = landmarks[1];
                 if (lastNosePos) {
                     const movementDelta = Math.sqrt(Math.pow(nose.x - lastNosePos.x, 2) + Math.pow(nose.y - lastNosePos.y, 2));
@@ -479,14 +476,13 @@
                 }
                 lastNosePos = nose;
 
-                // 3. EYE STATE CLASSIFICATION (Via Blendshape Thresholds)
+                // 3. EYE STATE CLASSIFICATION
                 let leftBlinkScore = 0, rightBlinkScore = 0;
                 for (const shape of blendshapes) {
                     if (shape.categoryName === "eyeBlinkLeft") leftBlinkScore = shape.score;
                     if (shape.categoryName === "eyeBlinkRight") rightBlinkScore = shape.score;
                 }
 
-                // If eye closure indicates sleeping thresholds
                 if (leftBlinkScore > 0.45 && rightBlinkScore > 0.45) {
                     if (!closedEyesStartTime) closedEyesStartTime = Date.now();
                 } else {
@@ -495,7 +491,6 @@
 
                 executeChronologyLogic();
             } else {
-                // If subject completely leaves the frame
                 closedEyesStartTime = null;
                 executeChronologyLogic();
             }
@@ -505,7 +500,6 @@
             const totalEyesClosedDuration = closedEyesStartTime ? (Date.now() - closedEyesStartTime) : 0;
             const absoluteStillDuration = Date.now() - lastMoveTime;
 
-            // Display time parameters remaining dynamically
             if (totalEyesClosedDuration > 0 || absoluteStillDuration > 2000) {
                 const maxRiskPeriod = Math.max(totalEyesClosedDuration, absoluteStillDuration);
                 const safetyMarginRemaining = Math.max(0, (TRIGGER_THRESHOLD_MS - maxRiskPeriod) / 1000);
@@ -514,7 +508,6 @@
                 countdownVal.innerText = "20.0s";
             }
 
-            // TRIGGER EVALUATION CAPACITIES
             if (totalEyesClosedDuration >= TRIGGER_THRESHOLD_MS && absoluteStillDuration >= TRIGGER_THRESHOLD_MS) {
                 activateStructuralSiren();
             } else {
@@ -534,7 +527,6 @@
             systemStatus.innerText = "CRITICAL ALERT // ATTENTION LOSS DETECTED";
             systemStatus.style.color = "var(--alert-red)";
 
-            // Build Raw Pure Frequency Siren Audio Graph Output
             alarmOsc = audioCtx.createOscillator();
             alarmOsc.type = 'sawtooth';
             alarmOsc.frequency.setValueAtTime(500, audioCtx.currentTime);
@@ -555,7 +547,10 @@
         function deactivateStructuralSiren() {
             if (isAlarmActive) {
                 isAlarmActive = false;
-                document.body.style.backgroundColor = var(--bg-deep);
+                
+                // FIXED BUG: Clear the inline background color so it returns to the CSS default
+                document.body.style.backgroundColor = "";
+                
                 systemStatus.innerText = "SYSTEM ACTIVE // BIO-MONITOR OPERATION RUNNING";
                 systemStatus.style.color = "var(--neon-cyan)";
                 clearInterval(alarmTicker);
