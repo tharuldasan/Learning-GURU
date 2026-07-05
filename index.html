@@ -3,58 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AEGIS // Visual Telemetry</title>
+    <title>AEGIS // Precision Tracking</title>
     <style>
-        :root {
-            --bg-deep: #030307;
-            --panel-bg: rgba(10, 10, 20, 0.75);
-            --neon-cyan: #00ffff;
-            --text-main: #e2e8f0;
-        }
-
-        body { margin: 0; background: var(--bg-deep); color: var(--text-main); font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
-
-        /* Dashboard Layout */
-        .dashboard { display: grid; grid-template-columns: 1fr 350px; gap: 20px; max-width: 1200px; margin: 20px auto; padding: 20px; }
-        
-        .feed-container { position: relative; background: var(--panel-bg); border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 8px; overflow: hidden; height: 480px; }
+        :root { --bg: #030307; --cyan: #00ffff; --red: #ff0055; }
+        body { margin: 0; background: var(--bg); color: white; font-family: monospace; }
+        .dashboard { display: grid; grid-template-columns: 640px 1fr; gap: 20px; padding: 20px; }
+        .feed-container { position: relative; width: 640px; height: 480px; }
         #webcam, #outputCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); }
-        
-        .telemetry-panel { display: flex; flex-direction: column; gap: 20px; }
-        .metric-card { background: var(--panel-bg); border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 8px; padding: 20px; }
-        .metric-title { font-size: 0.8rem; color: #a0aec0; text-transform: uppercase; margin-bottom: 5px; }
-        .metric-value { font-size: 1.5rem; font-family: monospace; color: var(--neon-cyan); }
-        
-        .btn-launch { padding: 20px 40px; font-size: 1.5rem; background: var(--neon-cyan); color: #000; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; }
-        .center-screen { display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .hidden { display: none !important; }
+        .data-panel { background: #111; padding: 20px; border-radius: 8px; border: 1px solid #333; }
+        .val { font-size: 2rem; color: var(--cyan); margin-bottom: 20px; }
+        .countdown { color: var(--red); font-size: 3rem; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div id="startScreen" class="center-screen">
-        <button id="launchBtn" class="btn-launch">ACTIVATE VISUAL TELEMETRY</button>
-    </div>
-
-    <div id="dashboard" class="dashboard hidden">
+    <div class="dashboard">
         <div class="feed-container">
             <video id="webcam" autoplay playsinline></video>
             <canvas id="outputCanvas"></canvas>
         </div>
-
-        <div class="telemetry-panel">
-            <div class="metric-card">
-                <div class="metric-title">Left Eyelid Aperture</div>
-                <div class="metric-value" id="leftApertureVal">0.00 mm</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-title">Right Eyelid Aperture</div>
-                <div class="metric-value" id="rightApertureVal">0.00 mm</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-title">Movement State</div>
-                <div class="metric-value" id="motionVal">CALIBRATING...</div>
-            </div>
+        <div class="data-panel">
+            <div>Blink Sensitivity (Left): <span id="lBlink" class="val">0.00</span></div>
+            <div>Blink Sensitivity (Right): <span id="rBlink" class="val">0.00</span></div>
+            <div>SOMNOLENCE RISK:</div>
+            <div id="countdown" class="countdown">20.0s</div>
         </div>
     </div>
 
@@ -64,69 +36,81 @@
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('outputCanvas');
         const ctx = canvas.getContext('2d');
-        const launchBtn = document.getElementById('launchBtn');
-        const dashboard = document.getElementById('dashboard');
-        const startScreen = document.getElementById('startScreen');
+        const countdownEl = document.getElementById('countdown');
         
-        let faceLandmarker;
-        let lastVideoTime = -1;
+        let faceLandmarker, isAlarmActive = false;
+        let eyesClosedStart = 0;
+        let alarmOsc, audioCtx;
 
-        // UI Targets
-        const leftApertureVal = document.getElementById('leftApertureVal');
-        const rightApertureVal = document.getElementById('rightApertureVal');
-        const motionVal = document.getElementById('motionVal');
-
-        launchBtn.addEventListener('click', async () => {
-            startScreen.classList.add('hidden');
-            dashboard.classList.remove('hidden');
-
+        async function init() {
             // Setup Camera
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             video.srcObject = stream;
+            
+            // Sync Canvas to Video
             video.onloadedmetadata = () => {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
             };
 
-            // Setup Mediapipe
             const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
                 baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
                 runningMode: "VIDEO",
                 outputFaceBlendshapes: true
             });
+            predict();
+        }
 
-            renderLoop();
-        });
+        function predict() {
+            const results = faceLandmarker.detectForVideo(video, performance.now());
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        function renderLoop() {
-            if (video.currentTime !== lastVideoTime) {
-                lastVideoTime = video.currentTime;
-                const results = faceLandmarker.detectForVideo(video, performance.now());
+            if (results.faceLandmarks.length > 0) {
+                // Draw Mesh
+                const drawingUtils = new DrawingUtils(ctx);
+                drawingUtils.drawConnectors(results.faceLandmarks[0], FaceLandmarker.FACE_LANDMARKS_TESSELATION, {color: '#00ffff', lineWidth: 1});
+
+                // Get Blink Scores (0.0 = Open, 1.0 = Closed)
+                const blendshapes = results.faceBlendshapes[0].categories;
+                const leftBlink = blendshapes.find(s => s.categoryName === 'eyeBlinkLeft').score;
+                const rightBlink = blendshapes.find(s => s.categoryName === 'eyeBlinkRight').score;
                 
-                // Clear Canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                if (results.faceLandmarks.length > 0) {
-                    const landmarks = results.faceLandmarks[0];
-                    const drawingUtils = new DrawingUtils(ctx);
+                document.getElementById('lBlink').innerText = leftBlink.toFixed(2);
+                document.getElementById('rBlink').innerText = rightBlink.toFixed(2);
+
+                // Logic: If average > 0.5, eyes are closed
+                if ((leftBlink + rightBlink) / 2 > 0.5) {
+                    if (eyesClosedStart === 0) eyesClosedStart = Date.now();
+                    const closedFor = (Date.now() - eyesClosedStart) / 1000;
+                    countdownEl.innerText = (20 - closedFor).toFixed(1) + "s";
                     
-                    // Draw visual mesh
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {color: '#00ffff', lineWidth: 1});
-                    
-                    // Calculate Eyes
-                    const leftDist = Math.abs(landmarks[159].y - landmarks[145].y) * 1000;
-                    const rightDist = Math.abs(landmarks[386].y - landmarks[374].y) * 1000;
-                    
-                    leftApertureVal.innerText = `${leftDist.toFixed(2)} mm`;
-                    rightApertureVal.innerText = `${rightDist.toFixed(2)} mm`;
-                    motionVal.innerText = "DETECTED";
+                    if (closedFor >= 5) triggerAlarm(); // Reduced to 5s for testing
                 } else {
-                    motionVal.innerText = "NO FACE FOUND";
+                    eyesClosedStart = 0;
+                    countdownEl.innerText = "20.0s";
+                    stopAlarm();
                 }
             }
-            requestAnimationFrame(renderLoop);
+            requestAnimationFrame(predict);
         }
+
+        function triggerAlarm() {
+            if (isAlarmActive) return;
+            isAlarmActive = true;
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            alarmOsc = audioCtx.createOscillator();
+            alarmOsc.connect(audioCtx.destination);
+            alarmOsc.start();
+        }
+
+        function stopAlarm() {
+            if (!isAlarmActive) return;
+            isAlarmActive = false;
+            if (alarmOsc) alarmOsc.stop();
+        }
+
+        init();
     </script>
 </body>
 </html>
