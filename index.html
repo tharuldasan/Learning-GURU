@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phonk & Focus | Anti-AFK</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            background: #0a0a0a;
+            color: #fff;
+            text-align: center;
+            transition: background 0.1s;
+        }
+        h1 {
+            color: #b026ff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        #webcam {
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(176, 38, 255, 0.5);
+            transform: scaleX(-1); /* Mirror the camera */
+            max-width: 100%;
+            border: 2px solid #b026ff;
+            margin-top: 20px;
+        }
+        button {
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: #b026ff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 20px;
+            box-shadow: 0 0 15px #b026ff;
+            transition: 0.2s;
+            text-transform: uppercase;
+        }
+        button:hover {
+            background: #d066ff;
+            box-shadow: 0 0 30px #d066ff;
+        }
+        #status {
+            font-size: 1.2rem;
+            margin: 20px;
+            color: #0f0;
+            font-weight: bold;
+        }
+        .hidden { display: none !important; }
+        
+        /* Hide YouTube player off-screen to avoid browser autoplay blocks */
+        #youtube-player {
+            position: absolute;
+            left: -9999px; 
+        }
+    </style>
+</head>
+<body>
+    <h1>Phonk & Focus</h1>
+    <p>Idle = Phonk Music. <br> Eyes closed + No movement for 20s = ALARM.</p>
+    
+    <button id="startBtn">Initiate System</button>
+    
+    <div id="app" class="hidden">
+        <div id="status">Loading AI face models...</div>
+        <video id="webcam" autoplay playsinline width="640" height="480"></video>
+        <div id="youtube-player"></div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    
+    <script type="module">
+        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+        let faceLandmarker;
+        let video;
+        let lastVideoTime = -1;
+        let ytPlayer;
+
+        // Tracking Variables
+        let closedEyesStartTime = null;
+        let lastMoveTime = Date.now();
+        let lastNosePos = null;
+
+        // Audio Variables
+        let audioCtx;
+        let oscillator;
+        let isAlarmRinging = false;
+        let phonkPlaying = false;
+        let alarmInterval;
+
+        const TIME_LIMIT_MS = 20000; // 20 seconds
+
+        const startBtn = document.getElementById('startBtn');
+        const statusText = document.getElementById('status');
+        const appDiv = document.getElementById('app');
+
+        // 1. Initialize YouTube Playlist (A popular Phonk Mix)
+        window.onYouTubeIframeAPIReady = function() {
+            ytPlayer = new YT.Player('youtube-player', {
+                height: '10', 
+                width: '10',
+                playerVars: {
+                    'autoplay': 0,
+                    'controls': 0,
+                    'listType': 'playlist',
+                    'list': 'PLy3E8062N2yQOEQV2Hj94nO-M77D2N47M' // Swap this ID with your own playlist if you want
+                },
+                events: {
+                    'onReady': (event) => {
+                        event.target.setShuffle(true); // Randomize songs
+                    }
+                }
+            });
+        };
+
+        // 2. Start Everything on Button Click (Browsers require a click to play audio)
+        startBtn.addEventListener('click', async () => {
+            startBtn.classList.add('hidden');
+            appDiv.classList.remove('hidden');
+            
+            // Setup Audio Context for the Siren
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Access Webcam
+            video = document.getElementById('webcam');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (err) {
+                statusText.innerText = "Camera access denied.";
+                statusText.style.color = "red";
+                return;
+            }
+
+            // Load Google's Face Landmark Model
+            statusText.innerText = "Downloading AI weights (might take a sec)...";
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+            );
+            faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                    delegate: "GPU"
+                },
+                outputFaceBlendshapes: true,
+                runningMode: "VIDEO",
+                numFaces: 1
+            });
+
+            // Start analyzing frames
+            video.addEventListener("loadeddata", predictWebcam);
+            stopAlarmAndPlayPhonk(); // Start the music
+        });
+
+        // 3. AI Processing Loop
+        async function predictWebcam() {
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                const results = faceLandmarker.detectForVideo(video, performance.now());
+                processResults(results);
+            }
+            requestAnimationFrame(predictWebcam);
+        }
+
+        // 4. Calculate Movement and Blinks
+        function processResults(results) {
+            if (results.faceLandmarks.length > 0 && results.faceBlendshapes.length > 0) {
+                const landmarks = results.faceLandmarks[0];
+                const blendshapes = results.faceBlendshapes[0].categories;
+                
+                // Track Head Movement using the Nose Tip (Landmark 1)
+                const nose = landmarks[1];
+                if (lastNosePos) {
+                    const dx = nose.x - lastNosePos.x;
+                    const dy = nose.y - lastNosePos.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    // If head moves significantly, reset movement timer
+                    if (dist > 0.003) { 
+                        lastMoveTime = Date.now();
+                    }
+                }
+                lastNosePos = nose;
+
+                // Track Eye Blinks using AI Blendshapes
+                let blinkLeft = 0;
+                let blinkRight = 0;
+                for (const shape of blendshapes) {
+                    if (shape.categoryName === "eyeBlinkLeft") blinkLeft = shape.score;
+                    if (shape.categoryName === "eyeBlinkRight") blinkRight = shape.score;
+                }
+
+                // If both eyes are more than 40% closed, start the timer
+                if (blinkLeft > 0.4 && blinkRight > 0.4) {
+                    if (!closedEyesStartTime) closedEyesStartTime = Date.now();
+                } else {
+                    closedEyesStartTime = null; // Reset if eyes open
+                }
+
+                evaluateState();
+            } else {
+                // No face detected -> count as eyes open to avoid false alarms when out of frame
+                closedEyesStartTime = null;
+                evaluateState();
+            }
+        }
+
+        // 5. Logic to trigger Music or Alarm
+        function evaluateState() {
+            const eyesClosedDuration = closedEyesStartTime ? (Date.now() - closedEyesStartTime) : 0;
+            const timeSinceLastMove = Date.now() - lastMoveTime;
+
+            if (eyesClosedDuration > 0) {
+                statusText.innerText = `Eyes closed: ${(eyesClosedDuration/1000).toFixed(1)}s | Still for: ${(timeSinceLastMove/1000).toFixed(1)}s`;
+                statusText.style.color = "orange";
+            } else {
+                statusText.innerText = "System Active | Tracking Movement & Eyes";
+                statusText.style.color = "#0f0";
+            }
+
+            // TRIGGER CONDITION: 20s of no movement AND 20s of closed eyes
+            if (eyesClosedDuration >= TIME_LIMIT_MS && timeSinceLastMove >= TIME_LIMIT_MS) {
+                triggerAlarm();
+            } else {
+                stopAlarmAndPlayPhonk();
+            }
+        }
+
+        // 6. The Punishments & Rewards
+        function triggerAlarm() {
+            if (ytPlayer && typeof ytPlayer.pauseVideo === 'function' && phonkPlaying) {
+                ytPlayer.pauseVideo(); // Pause the vibe
+                phonkPlaying = false;
+            }
+            
+            if (isAlarmRinging) return;
+            isAlarmRinging = true;
+            
+            document.body.style.background = '#900';
+            statusText.innerText = "WAKE UP!";
+            statusText.style.color = "white";
+
+            // Synthesize an awful sawtooth siren
+            oscillator = audioCtx.createOscillator();
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+            
+            let gainNode = audioCtx.createGain();
+            gainNode.gain.setValueAtTime(1, audioCtx.currentTime); // Max volume
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            
+            // Alternate frequency to sound like an emergency siren
+            alarmInterval = setInterval(() => {
+                if(!isAlarmRinging) return;
+                oscillator.frequency.value = oscillator.frequency.value === 400 ? 800 : 400;
+            }, 150);
+        }
+
+        function stopAlarmAndPlayPhonk() {
+            if (isAlarmRinging) {
+                isAlarmRinging = false;
+                document.body.style.background = '#0a0a0a';
+                clearInterval(alarmInterval);
+                if(oscillator) {
+                    oscillator.stop();
+                    oscillator.disconnect();
+                }
+            }
+            
+            // Start/Resume YouTube music
+            if (ytPlayer && typeof ytPlayer.playVideo === 'function' && !phonkPlaying) {
+                ytPlayer.playVideo();
+                phonkPlaying = true;
+            }
+        }
+    </script>
+</body>
+</html>
