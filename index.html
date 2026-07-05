@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phonk & Focus | Anti-AFK v2</title>
+    <title>Instant Phonk & Focus</title>
     <style>
         body {
             margin: 0;
@@ -18,12 +18,11 @@
             color: #b026ff;
             text-transform: uppercase;
             letter-spacing: 2px;
-            margin-bottom: 5px;
         }
         #webcam {
             border-radius: 10px;
             box-shadow: 0 0 20px rgba(176, 38, 255, 0.5);
-            transform: scaleX(-1); /* Mirror camera */
+            transform: scaleX(-1);
             max-width: 100%;
             border: 2px solid #b026ff;
             margin-top: 20px;
@@ -31,25 +30,19 @@
         }
         button {
             padding: 15px 40px;
-            font-size: 1.3rem;
+            font-size: 1.5rem;
             font-weight: bold;
-            background: #333;
-            color: #888;
-            border: 2px solid #555;
-            border-radius: 5px;
-            cursor: not-allowed;
-            margin: 20px;
-            transition: 0.2s;
-            text-transform: uppercase;
-        }
-        button.ready {
             background: #b026ff;
             color: #fff;
             border: none;
+            border-radius: 5px;
             cursor: pointer;
+            margin: 20px;
             box-shadow: 0 0 15px #b026ff;
+            transition: 0.2s;
+            text-transform: uppercase;
         }
-        button.ready:hover {
+        button:hover {
             background: #d066ff;
             box-shadow: 0 0 30px #d066ff;
         }
@@ -68,12 +61,12 @@
 </head>
 <body>
     <h1>Phonk & Focus</h1>
-    <p>Idle = Phonk Music. <br> Eyes closed + No movement for 20s = ALARM.</p>
+    <p>Instant Start. Music plays immediately while AI loads in the background.</p>
     
-    <button id="startBtn" disabled>Connecting to YouTube...</button>
+    <button id="startBtn">Initiate System</button>
     
     <div id="app" class="hidden">
-        <div id="status">Music started! Waking up AI eye tracking...</div>
+        <div id="status">Starting music...</div>
         <video id="webcam" autoplay playsinline width="640" height="480"></video>
         <div id="youtube-player"></div>
     </div>
@@ -87,78 +80,69 @@
         let video;
         let lastVideoTime = -1;
         let ytPlayer;
-        let isYtReady = false;
+        let ytReady = false;
 
-        // Tracking Variables
+        // Tracking timers
         let closedEyesStartTime = null;
         let lastMoveTime = Date.now();
         let lastNosePos = null;
 
-        // Audio Variables
+        // Audio system
         let audioCtx;
         let oscillator;
         let isAlarmRinging = false;
-        let phonkPlaying = false;
         let alarmInterval;
-
-        const TIME_LIMIT_MS = 20000; // 20 seconds
+        const TIME_LIMIT_MS = 20000; 
 
         const startBtn = document.getElementById('startBtn');
         const statusText = document.getElementById('status');
         const appDiv = document.getElementById('app');
 
-        // 1. YouTube Setup (Runs automatically on page load)
+        // 1. Load YouTube instantly with a single long video ID instead of a heavy playlist
         window.onYouTubeIframeAPIReady = function() {
             ytPlayer = new YT.Player('youtube-player', {
                 height: '10', 
                 width: '10',
+                videoId: '4FdK9He8bLw', // A popular long Phonk Mix. You can swap this ID with any YouTube video.
                 playerVars: {
                     'autoplay': 0,
                     'controls': 0,
-                    'listType': 'playlist',
-                    'list': 'PLy3E8062N2yQOEQV2Hj94nO-M77D2N47M' // Curated Phonk Playlist
+                    'start': Math.floor(Math.random() * 1800) // Starts at a random spot so it feels different every time
                 },
                 events: {
-                    'onReady': onPlayerReady,
-                    'onError': (e) => { console.error("YouTube Error:", e); }
+                    'onReady': () => { ytReady = true; },
+                    'onStateChange': (e) => {
+                        // If the long video ends, loop it back to the beginning
+                        if (e.data === YT.PlayerState.ENDED) { ytPlayer.playVideo(); }
+                    }
                 }
             });
         };
 
-        function onPlayerReady(event) {
-            isYtReady = true;
-            event.target.setShuffle(true); // Shuffle the tracks
-            startBtn.innerText = "Initiate System (Play Phonk)";
-            startBtn.disabled = false;
-            startBtn.classList.add('ready');
-        }
-
-        // 2. Click Handler: Instantly triggers music, then hooks up camera/AI
+        // 2. Click is active IMMEDIATELY
         startBtn.addEventListener('click', async () => {
-            if (!isYtReady) return;
-
-            // Reveal app container immediately
             startBtn.classList.add('hidden');
             appDiv.classList.remove('hidden');
             
-            // Force Audio context configuration
+            // Start browser audio engine
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             
-            // Start the music immediately
-            playPhonkMusic();
+            // Trigger music right now
+            playMusicAttempts();
 
-            // Setup Camera
+            // Fire up the webcam
             video = document.getElementById('webcam');
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
             } catch (err) {
-                statusText.innerText = "Camera access denied. Music will play, but tracking is disabled.";
+                statusText.innerText = "Webcam blocked. Music will play, but tracking is off.";
                 statusText.style.color = "red";
                 return;
             }
 
-            // Load AI models asynchronously while music is bumping
+            // Download the AI weights silently in the background while the user listens to music
+            statusText.innerText = "🎵 Music active. Booting up eye-tracking AI in background...";
             try {
                 const vision = await FilesetResolver.forVisionTasks(
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
@@ -173,19 +157,24 @@
                     numFaces: 1
                 });
 
-                statusText.innerText = "System Fully Operational | Vibe Active";
+                statusText.innerText = "System Fully Operational | AI Active";
                 statusText.style.color = "#0f0";
-
-                // Start AI frame analysis loop
                 video.addEventListener("loadeddata", predictWebcam);
-            } catch (aiError) {
-                console.error(aiError);
-                statusText.innerText = "Failed to load tracking models. Refresh and try again.";
-                statusText.style.color = "red";
+            } catch (e) {
+                statusText.innerText = "AI failed to load. Music will keep playing.";
             }
         });
 
-        // 3. Tracking Loop
+        // Safe loop to force YouTube to play the absolute millisecond it responds
+        function playMusicAttempts() {
+            if (ytReady && typeof ytPlayer.playVideo === 'function') {
+                ytPlayer.playVideo();
+            } else {
+                setTimeout(playMusicAttempts, 100);
+            }
+        }
+
+        // 3. AI Tracking Loop
         async function predictWebcam() {
             if (video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
@@ -197,33 +186,26 @@
             requestAnimationFrame(predictWebcam);
         }
 
-        // 4. Processing Eyes and Movement
         function processResults(results) {
             if (results.faceLandmarks && results.faceLandmarks.length > 0) {
                 const landmarks = results.faceLandmarks[0];
                 const blendshapes = results.faceBlendshapes[0].categories;
                 
-                // Track Movement via Nose tip
+                // Motion check
                 const nose = landmarks[1];
                 if (lastNosePos) {
-                    const dx = nose.x - lastNosePos.x;
-                    const dy = nose.y - lastNosePos.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    if (dist > 0.003) { 
-                        lastMoveTime = Date.now(); // User moved
-                    }
+                    const dist = Math.sqrt(Math.pow(nose.x - lastNosePos.x, 2) + Math.pow(nose.y - lastNosePos.y, 2));
+                    if (dist > 0.003) lastMoveTime = Date.now(); 
                 }
                 lastNosePos = nose;
 
-                // Track Blinks
-                let blinkLeft = 0;
-                let blinkRight = 0;
+                // Eye check
+                let blinkLeft = 0, blinkRight = 0;
                 for (const shape of blendshapes) {
                     if (shape.categoryName === "eyeBlinkLeft") blinkLeft = shape.score;
                     if (shape.categoryName === "eyeBlinkRight") blinkRight = shape.score;
                 }
 
-                // Threshold check (0.4 means 40% closed)
                 if (blinkLeft > 0.4 && blinkRight > 0.4) {
                     if (!closedEyesStartTime) closedEyesStartTime = Date.now();
                 } else {
@@ -232,25 +214,23 @@
 
                 evaluateState();
             } else {
-                closedEyesStartTime = null; // Reset if user leaves frame entirely
+                closedEyesStartTime = null;
                 evaluateState();
             }
         }
 
-        // 5. Timer Evaluator
         function evaluateState() {
             const eyesClosedDuration = closedEyesStartTime ? (Date.now() - closedEyesStartTime) : 0;
             const timeSinceLastMove = Date.now() - lastMoveTime;
 
             if (eyesClosedDuration > 0) {
-                statusText.innerText = `Eyes closed: ${(eyesClosedDuration/1000).toFixed(1)}s | Motionless: ${(timeSinceLastMove/1000).toFixed(1)}s`;
+                statusText.innerText = `Eyes closed: ${(eyesClosedDuration/1000).toFixed(1)}s | Still: ${(timeSinceLastMove/1000).toFixed(1)}s`;
                 statusText.style.color = "orange";
-            } else {
-                statusText.innerText = "System Active | Tracking your eyes...";
+            } else if (faceLandmarker) {
+                statusText.innerText = "System Active | Tracking Eyes & Movement";
                 statusText.style.color = "#0f0";
             }
 
-            // Conditions met: Both closed eyes AND zero movement for 20 seconds
             if (eyesClosedDuration >= TIME_LIMIT_MS && timeSinceLastMove >= TIME_LIMIT_MS) {
                 triggerAlarm();
             } else {
@@ -258,26 +238,13 @@
             }
         }
 
-        // 6. Action Functions
-        function playPhonkMusic() {
-            if (ytPlayer && typeof ytPlayer.playVideo === 'function' && !phonkPlaying) {
-                ytPlayer.nextVideo(); // Forces it to jump into the shuffled playlist immediately
-                ytPlayer.playVideo();
-                phonkPlaying = true;
-            }
-        }
-
         function triggerAlarm() {
-            if (ytPlayer && phonkPlaying) {
-                ytPlayer.pauseVideo();
-                phonkPlaying = false;
-            }
-            
+            if (ytReady) ytPlayer.pauseVideo();
             if (isAlarmRinging) return;
             isAlarmRinging = true;
             
             document.body.style.background = '#900';
-            statusText.innerText = "WAKE UP!";
+            statusText.innerText = "WAKE UP!!!";
             statusText.style.color = "white";
 
             oscillator = audioCtx.createOscillator();
@@ -306,10 +273,8 @@
                     try { oscillator.stop(); oscillator.disconnect(); } catch(e){}
                 }
             }
-            
-            if (ytPlayer && !phonkPlaying) {
+            if (ytReady && ytPlayer.getPlayerState() !== 1) {
                 ytPlayer.playVideo();
-                phonkPlaying = true;
             }
         }
     </script>
