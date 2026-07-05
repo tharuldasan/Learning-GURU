@@ -288,20 +288,17 @@
         </div>
 
         <div class="media-box">
-            <div id="player"></div>
+            <iframe id="videoFrame" width="426" height="240" src="" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
         </div>
     </div>
 
-    <script src="https://www.youtube.com/iframe_api"></script>
-    
     <script type="module">
         import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
         let faceLandmarker;
         let video;
         let lastVideoTime = -1;
-        let ytPlayer;
-        let selectedVideoId = "4FdK9He8bLw"; // Default phonk stream
+        let selectedVideoId = "4FdK9He8bLw"; // Default phonk mix
         let useCustomUrl = false;
 
         // Core Biometrics Tracking Architecture
@@ -314,7 +311,7 @@
         let alarmOsc;
         let isAlarmActive = false;
         let alarmTicker;
-        const TRIGGER_THRESHOLD_MS = 20000; // 20 Seconds Continuous Target
+        const TRIGGER_THRESHOLD_MS = 20000; // 20 Seconds
 
         // DOM Map
         const configHub = document.getElementById('configHub');
@@ -325,6 +322,7 @@
         const ytUrlInput = document.getElementById('ytUrl');
         const launchBtn = document.getElementById('launchBtn');
         const systemStatus = document.getElementById('systemStatus');
+        const videoFrame = document.getElementById('videoFrame');
         
         // Live Telemetry Targets
         const leftApertureVal = document.getElementById('leftApertureVal');
@@ -334,7 +332,7 @@
         const motionVal = document.getElementById('motionVal');
         const countdownVal = document.getElementById('countdownVal');
 
-        // Routing Configuration Options
+        // Configuration Toggles
         modePresaved.addEventListener('click', () => {
             useCustomUrl = false;
             modePresaved.classList.add('active');
@@ -355,11 +353,6 @@
             return (match && match[2].length === 11) ? match[2] : null;
         }
 
-        // Global integration hook for YouTube execution
-        window.onYouTubeIframeAPIReady = function() {
-            console.log("YouTube Framework Connected Object Generated.");
-        };
-
         // System Initialization Trigger
         launchBtn.addEventListener('click', async () => {
             if (useCustomUrl) {
@@ -371,26 +364,17 @@
                 selectedVideoId = targetId;
             }
 
-            // Move Interfaces seamlessly
+            // Move Interfaces smoothly
             configHub.classList.add('hidden');
             dashboard.classList.remove('hidden');
             
             // Allocate Native Audio Context Pipeline
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-            // Load YouTube Stream directly with standard dimensions
-            ytPlayer = new YT.Player('player', {
-                height: '240',
-                width: '426',
-                videoId: selectedVideoId,
-                playerVars: { 'autoplay': 1, 'controls': 1 },
-                events: {
-                    'onReady': (event) => {
-                        event.target.playVideo();
-                        systemStatus.innerText = "STREAM INJECTED // LOADING NEURAL COMPLIANCE LABELS...";
-                    }
-                }
-            });
+            // INJECT VIDEO AND FORWARD STREAM IMMEDIATELY
+            // enablejsapi=1 parameter lets us send pause/play signals across the boundary cleanly without scripts
+            videoFrame.src = `https://www.youtube.com/embed/${selectedVideoId}?autoplay=1&enablejsapi=1&controls=1&loop=1&playlist=${selectedVideoId}`;
+            systemStatus.innerText = "STREAM INJECTED // LOADING NEURAL COMPLIANCE LABELS...";
 
             // Initialize Camera System API Hardware Linkage
             video = document.getElementById('webcam');
@@ -447,7 +431,7 @@
                 const landmarks = results.faceLandmarks[0];
                 const blendshapes = results.faceBlendshapes[0].categories;
 
-                // 1. CALCULATE STRUCTURAL DISTANCE WITHIN EYELIDS
+                // Calculate Structural Distance Within Eyelids
                 const leftTop = landmarks[159];
                 const leftBot = landmarks[145];
                 const leftDistance = Math.sqrt(Math.pow(leftTop.x - leftBot.x, 2) + Math.pow(leftTop.y - leftBot.y, 2)) * 100;
@@ -461,7 +445,7 @@
                 leftBar.style.width = `${Math.min(leftDistance * 25, 100)}%`;
                 rightBar.style.width = `${Math.min(rightDistance * 25, 100)}%`;
 
-                // 2. MONITOR MAIN PERSON VELOCITY DELTA
+                // Monitor Main Person Velocity Delta
                 const nose = landmarks[1];
                 if (lastNosePos) {
                     const movementDelta = Math.sqrt(Math.pow(nose.x - lastNosePos.x, 2) + Math.pow(nose.y - lastNosePos.y, 2));
@@ -476,7 +460,7 @@
                 }
                 lastNosePos = nose;
 
-                // 3. EYE STATE CLASSIFICATION
+                // Eye State Classification
                 let leftBlinkScore = 0, rightBlinkScore = 0;
                 for (const shape of blendshapes) {
                     if (shape.categoryName === "eyeBlinkLeft") leftBlinkScore = shape.score;
@@ -516,9 +500,10 @@
         }
 
         function activateStructuralSiren() {
-            if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
-                try { ytPlayer.pauseVideo(); } catch(e){}
-            }
+            // Send clear pause command over iframe postMessage channel
+            try {
+                videoFrame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+            } catch(e){}
 
             if (isAlarmActive) return;
             isAlarmActive = true;
@@ -547,21 +532,17 @@
         function deactivateStructuralSiren() {
             if (isAlarmActive) {
                 isAlarmActive = false;
-                
-                // FIXED BUG: Clear the inline background color so it returns to the CSS default
                 document.body.style.backgroundColor = "";
-                
                 systemStatus.innerText = "SYSTEM ACTIVE // BIO-MONITOR OPERATION RUNNING";
                 systemStatus.style.color = "var(--neon-cyan)";
                 clearInterval(alarmTicker);
                 if (alarmOsc) {
                     try { alarmOsc.stop(); alarmOsc.disconnect(); } catch(e){}
                 }
-            }
 
-            if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+                // Send clean play command over iframe postMessage channel
                 try {
-                    if (ytPlayer.getPlayerState() !== 1) ytPlayer.playVideo();
+                    videoFrame.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
                 } catch(e){}
             }
         }
