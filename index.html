@@ -206,6 +206,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            width: 100%;
         }
 
         .status-header {
@@ -287,9 +288,8 @@
             </div>
         </div>
 
-        <div class="media-box">
-            <iframe id="videoFrame" width="426" height="240" src="" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-        </div>
+        <div class="media-box" id="mediaBox">
+            </div>
     </div>
 
     <script type="module">
@@ -322,7 +322,7 @@
         const ytUrlInput = document.getElementById('ytUrl');
         const launchBtn = document.getElementById('launchBtn');
         const systemStatus = document.getElementById('systemStatus');
-        const videoFrame = document.getElementById('videoFrame');
+        const mediaBox = document.getElementById('mediaBox');
         
         // Live Telemetry Targets
         const leftApertureVal = document.getElementById('leftApertureVal');
@@ -371,12 +371,22 @@
             // Allocate Native Audio Context Pipeline
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-            // INJECT VIDEO AND FORWARD STREAM IMMEDIATELY
-            // enablejsapi=1 parameter lets us send pause/play signals across the boundary cleanly without scripts
-            videoFrame.src = `https://www.youtube.com/embed/${selectedVideoId}?autoplay=1&enablejsapi=1&controls=1&loop=1&playlist=${selectedVideoId}`;
+            // INJECT VIDEO DYNAMICALLY USING YOUTUBE-NOCOOKIE (AD-BLOCKER BYPASS)
+            // By doing this exactly when the button is clicked, the browser grants it audio rights instantly.
+            mediaBox.innerHTML = `
+                <iframe 
+                    id="videoFrame" 
+                    width="100%" 
+                    height="240" 
+                    src="https://www.youtube-nocookie.com/embed/${selectedVideoId}?autoplay=1&enablejsapi=1&controls=1&loop=1&playlist=${selectedVideoId}" 
+                    frameborder="0" 
+                    allow="autoplay; encrypted-media" 
+                    allowfullscreen>
+                </iframe>`;
+                
             systemStatus.innerText = "STREAM INJECTED // LOADING NEURAL COMPLIANCE LABELS...";
 
-            // Initialize Camera System API Hardware Linkage
+            // Initialize Camera System
             video = document.getElementById('webcam');
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -387,7 +397,7 @@
                 return;
             }
 
-            // Launch Async Background Tracking Assembly Compilation
+            // Launch Async Background Tracking Assembly
             try {
                 const vision = await FilesetResolver.forVisionTasks(
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
@@ -431,13 +441,11 @@
                 const landmarks = results.faceLandmarks[0];
                 const blendshapes = results.faceBlendshapes[0].categories;
 
-                // Calculate Structural Distance Within Eyelids
-                const leftTop = landmarks[159];
-                const leftBot = landmarks[145];
+                // Eyelid Math
+                const leftTop = landmarks[159], leftBot = landmarks[145];
                 const leftDistance = Math.sqrt(Math.pow(leftTop.x - leftBot.x, 2) + Math.pow(leftTop.y - leftBot.y, 2)) * 100;
 
-                const rightTop = landmarks[386];
-                const rightBot = landmarks[374];
+                const rightTop = landmarks[386], rightBot = landmarks[374];
                 const rightDistance = Math.sqrt(Math.pow(rightTop.x - rightBot.x, 2) + Math.pow(rightTop.y - rightBot.y, 2)) * 100;
 
                 leftApertureVal.innerText = `${leftDistance.toFixed(2)} mm`;
@@ -445,7 +453,7 @@
                 leftBar.style.width = `${Math.min(leftDistance * 25, 100)}%`;
                 rightBar.style.width = `${Math.min(rightDistance * 25, 100)}%`;
 
-                // Monitor Main Person Velocity Delta
+                // Nose Tracking
                 const nose = landmarks[1];
                 if (lastNosePos) {
                     const movementDelta = Math.sqrt(Math.pow(nose.x - lastNosePos.x, 2) + Math.pow(nose.y - lastNosePos.y, 2));
@@ -460,7 +468,7 @@
                 }
                 lastNosePos = nose;
 
-                // Eye State Classification
+                // Eye State
                 let leftBlinkScore = 0, rightBlinkScore = 0;
                 for (const shape of blendshapes) {
                     if (shape.categoryName === "eyeBlinkLeft") leftBlinkScore = shape.score;
@@ -500,10 +508,11 @@
         }
 
         function activateStructuralSiren() {
-            // Send clear pause command over iframe postMessage channel
-            try {
-                videoFrame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-            } catch(e){}
+            // Find dynamically created frame and pause it
+            const frame = document.getElementById('videoFrame');
+            if (frame && frame.contentWindow) {
+                try { frame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*'); } catch(e){}
+            }
 
             if (isAlarmActive) return;
             isAlarmActive = true;
@@ -540,10 +549,11 @@
                     try { alarmOsc.stop(); alarmOsc.disconnect(); } catch(e){}
                 }
 
-                // Send clean play command over iframe postMessage channel
-                try {
-                    videoFrame.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-                } catch(e){}
+                // Find dynamically created frame and play it
+                const frame = document.getElementById('videoFrame');
+                if (frame && frame.contentWindow) {
+                    try { frame.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*'); } catch(e){}
+                }
             }
         }
     </script>
