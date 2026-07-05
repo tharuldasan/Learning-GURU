@@ -3,16 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AEGIS // Precision Tracking</title>
+    <title>AEGIS // Precision Tracking v2</title>
     <style>
-        :root { --bg: #030307; --cyan: #00ffff; --red: #ff0055; }
-        body { margin: 0; background: var(--bg); color: white; font-family: monospace; }
+        :root { --bg: #030307; --cyan: #00ffff; --red: #ff0055; --amber: #ffcc00; }
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Courier New', monospace; }
         .dashboard { display: grid; grid-template-columns: 640px 1fr; gap: 20px; padding: 20px; }
-        .feed-container { position: relative; width: 640px; height: 480px; }
+        .feed-container { position: relative; width: 640px; height: 480px; border: 1px solid #333; }
         #webcam, #outputCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); }
         .data-panel { background: #111; padding: 20px; border-radius: 8px; border: 1px solid #333; }
-        .val { font-size: 2rem; color: var(--cyan); margin-bottom: 20px; }
-        .countdown { color: var(--red); font-size: 3rem; font-weight: bold; }
+        .val { font-size: 1.5rem; color: var(--cyan); margin-bottom: 20px; }
+        .status-badge { font-size: 1.2rem; font-weight: bold; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 20px; }
+        .state-monitoring { background: #004400; color: #00ff00; }
+        .state-alarming { background: #440000; color: #ff0000; }
+        .state-cooldown { background: #443300; color: var(--amber); }
     </style>
 </head>
 <body>
@@ -23,10 +26,12 @@
             <canvas id="outputCanvas"></canvas>
         </div>
         <div class="data-panel">
-            <div>Blink Sensitivity (Left): <span id="lBlink" class="val">0.00</span></div>
-            <div>Blink Sensitivity (Right): <span id="rBlink" class="val">0.00</span></div>
-            <div>SOMNOLENCE RISK:</div>
-            <div id="countdown" class="countdown">20.0s</div>
+            <div id="sysStatus" class="status-badge state-monitoring">SYSTEM MONITORING</div>
+            <div>Sensitivity: <span id="sensitivityVal" class="val">0.00</span></div>
+            <div style="font-size: 0.8rem; color: #666;">
+                * Trigger: > 0.25<br>
+                * Release: < 0.10 + 2s Buffer
+            </div>
         </div>
     </div>
 
@@ -36,18 +41,15 @@
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('outputCanvas');
         const ctx = canvas.getContext('2d');
-        const countdownEl = document.getElementById('countdown');
+        const statusEl = document.getElementById('sysStatus');
         
-        let faceLandmarker, isAlarmActive = false;
-        let eyesClosedStart = 0;
-        let alarmOsc, audioCtx;
+        let faceLandmarker, audioCtx, alarmOsc, gainNode;
+        let isAlarmActive = false;
+        let cooldownStartTime = 0; // Used for the 2-second buffer
 
         async function init() {
-            // Setup Camera
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             video.srcObject = stream;
-            
-            // Sync Canvas to Video
             video.onloadedmetadata = () => {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
@@ -67,47 +69,68 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (results.faceLandmarks.length > 0) {
-                // Draw Mesh
+                // Visual Mesh
                 const drawingUtils = new DrawingUtils(ctx);
                 drawingUtils.drawConnectors(results.faceLandmarks[0], FaceLandmarker.FACE_LANDMARKS_TESSELATION, {color: '#00ffff', lineWidth: 1});
 
-                // Get Blink Scores (0.0 = Open, 1.0 = Closed)
+                // Calculate Sensitivity (Average of both eyes)
                 const blendshapes = results.faceBlendshapes[0].categories;
                 const leftBlink = blendshapes.find(s => s.categoryName === 'eyeBlinkLeft').score;
                 const rightBlink = blendshapes.find(s => s.categoryName === 'eyeBlinkRight').score;
+                const sensitivity = (leftBlink + rightBlink) / 2;
                 
-                document.getElementById('lBlink').innerText = leftBlink.toFixed(2);
-                document.getElementById('rBlink').innerText = rightBlink.toFixed(2);
+                document.getElementById('sensitivityVal').innerText = sensitivity.toFixed(3);
 
-                // Logic: If average > 0.5, eyes are closed
-                if ((leftBlink + rightBlink) / 2 > 0.5) {
-                    if (eyesClosedStart === 0) eyesClosedStart = Date.now();
-                    const closedFor = (Date.now() - eyesClosedStart) / 1000;
-                    countdownEl.innerText = (20 - closedFor).toFixed(1) + "s";
-                    
-                    if (closedFor >= 5) triggerAlarm(); // Reduced to 5s for testing
-                } else {
-                    eyesClosedStart = 0;
-                    countdownEl.innerText = "20.0s";
-                    stopAlarm();
+                // --- LOGIC ENGINE ---
+                
+                // 1. TRIGGER ALARM
+                if (sensitivity > 0.25) {
+                    cooldownStartTime = 0; // Reset buffer if eyes close again
+                    if (!isAlarmActive) triggerAlarm();
+                } 
+                // 2. CHECK COOLDOWN (Eyes are open < 0.10)
+                else if (sensitivity < 0.10) {
+                    if (isAlarmActive) {
+                        // Start the 2-second safety buffer timer if not already started
+                        if (cooldownStartTime === 0) {
+                            cooldownStartTime = Date.now();
+                            statusEl.innerText = "SAFETY COOLDOWN...";
+                            statusEl.className = "status-badge state-cooldown";
+                        } 
+                        // Check if 2 seconds have passed
+                        else if (Date.now() - cooldownStartTime > 2000) {
+                            stopAlarm();
+                        }
+                    }
                 }
             }
             requestAnimationFrame(predict);
         }
 
         function triggerAlarm() {
-            if (isAlarmActive) return;
             isAlarmActive = true;
+            statusEl.innerText = "!!! ALARM ACTIVE !!!";
+            statusEl.className = "status-badge state-alarming";
+            
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             alarmOsc = audioCtx.createOscillator();
-            alarmOsc.connect(audioCtx.destination);
+            gainNode = audioCtx.createGain();
+            alarmOsc.type = 'sawtooth';
+            alarmOsc.frequency.setValueAtTime(440, audioCtx.currentTime);
+            alarmOsc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
             alarmOsc.start();
         }
 
         function stopAlarm() {
-            if (!isAlarmActive) return;
             isAlarmActive = false;
-            if (alarmOsc) alarmOsc.stop();
+            cooldownStartTime = 0;
+            statusEl.innerText = "SYSTEM MONITORING";
+            statusEl.className = "status-badge state-monitoring";
+            if (alarmOsc) {
+                alarmOsc.stop();
+                alarmOsc.disconnect();
+            }
         }
 
         init();
