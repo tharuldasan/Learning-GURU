@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AEGIS // Precision Tracking v2</title>
+    <title>AEGIS // 10s Threshold Logic</title>
     <style>
         :root { --bg: #030307; --cyan: #00ffff; --red: #ff0055; --amber: #ffcc00; }
         body { margin: 0; background: var(--bg); color: white; font-family: 'Courier New', monospace; }
@@ -11,7 +11,8 @@
         .feed-container { position: relative; width: 640px; height: 480px; border: 1px solid #333; }
         #webcam, #outputCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); }
         .data-panel { background: #111; padding: 20px; border-radius: 8px; border: 1px solid #333; }
-        .val { font-size: 1.5rem; color: var(--cyan); margin-bottom: 20px; }
+        .val { font-size: 2.5rem; color: var(--cyan); margin-bottom: 20px; }
+        .countdown-display { font-size: 4rem; font-weight: bold; color: var(--red); margin: 20px 0; }
         .status-badge { font-size: 1.2rem; font-weight: bold; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 20px; }
         .state-monitoring { background: #004400; color: #00ff00; }
         .state-alarming { background: #440000; color: #ff0000; }
@@ -27,11 +28,9 @@
         </div>
         <div class="data-panel">
             <div id="sysStatus" class="status-badge state-monitoring">SYSTEM MONITORING</div>
+            <div>Timer:</div>
+            <div id="timerDisplay" class="countdown-display">10.0s</div>
             <div>Sensitivity: <span id="sensitivityVal" class="val">0.00</span></div>
-            <div style="font-size: 0.8rem; color: #666;">
-                * Trigger: > 0.25<br>
-                * Release: < 0.10 + 2s Buffer
-            </div>
         </div>
     </div>
 
@@ -42,10 +41,14 @@
         const canvas = document.getElementById('outputCanvas');
         const ctx = canvas.getContext('2d');
         const statusEl = document.getElementById('sysStatus');
+        const timerEl = document.getElementById('timerDisplay');
+        const sensitivityEl = document.getElementById('sensitivityVal');
         
         let faceLandmarker, audioCtx, alarmOsc, gainNode;
         let isAlarmActive = false;
-        let cooldownStartTime = 0; // Used for the 2-second buffer
+        let cooldownStartTime = 0; 
+        let countdown = 10.0;
+        let lastTimestamp = performance.now();
 
         async function init() {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -65,7 +68,11 @@
         }
 
         function predict() {
-            const results = faceLandmarker.detectForVideo(video, performance.now());
+            const now = performance.now();
+            const deltaTime = (now - lastTimestamp) / 1000;
+            lastTimestamp = now;
+
+            const results = faceLandmarker.detectForVideo(video, now);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (results.faceLandmarks.length > 0) {
@@ -73,34 +80,44 @@
                 const drawingUtils = new DrawingUtils(ctx);
                 drawingUtils.drawConnectors(results.faceLandmarks[0], FaceLandmarker.FACE_LANDMARKS_TESSELATION, {color: '#00ffff', lineWidth: 1});
 
-                // Calculate Sensitivity (Average of both eyes)
+                // Get Sensitivity
                 const blendshapes = results.faceBlendshapes[0].categories;
                 const leftBlink = blendshapes.find(s => s.categoryName === 'eyeBlinkLeft').score;
                 const rightBlink = blendshapes.find(s => s.categoryName === 'eyeBlinkRight').score;
                 const sensitivity = (leftBlink + rightBlink) / 2;
                 
-                document.getElementById('sensitivityVal').innerText = sensitivity.toFixed(3);
+                sensitivityEl.innerText = sensitivity.toFixed(3);
 
                 // --- LOGIC ENGINE ---
                 
-                // 1. TRIGGER ALARM
-                if (sensitivity > 0.25) {
-                    cooldownStartTime = 0; // Reset buffer if eyes close again
-                    if (!isAlarmActive) triggerAlarm();
+                // 1. EYES CLOSED (SENSITIVITY > 0.03)
+                if (sensitivity > 0.03) {
+                    cooldownStartTime = 0; // Cancel safety cooldown if it was active
+                    
+                    if (countdown > 0) {
+                        countdown = Math.max(0, countdown - deltaTime);
+                        timerEl.innerText = countdown.toFixed(1) + "s";
+                    } else if (!isAlarmActive) {
+                        triggerAlarm();
+                    }
                 } 
-                // 2. CHECK COOLDOWN (Eyes are open < 0.10)
+                // 2. EYES OPEN (SENSITIVITY < 0.10)
                 else if (sensitivity < 0.10) {
+                    // Start 2s safety buffer if alarm was active
                     if (isAlarmActive) {
-                        // Start the 2-second safety buffer timer if not already started
-                        if (cooldownStartTime === 0) {
-                            cooldownStartTime = Date.now();
-                            statusEl.innerText = "SAFETY COOLDOWN...";
-                            statusEl.className = "status-badge state-cooldown";
-                        } 
-                        // Check if 2 seconds have passed
-                        else if (Date.now() - cooldownStartTime > 2000) {
+                        if (cooldownStartTime === 0) cooldownStartTime = Date.now();
+                        statusEl.innerText = "SAFETY COOLDOWN...";
+                        statusEl.className = "status-badge state-cooldown";
+                        
+                        if (Date.now() - cooldownStartTime > 2000) {
                             stopAlarm();
                         }
+                    } else {
+                        // Reset countdown if not alarming
+                        countdown = 10.0;
+                        timerEl.innerText = "10.0s";
+                        statusEl.innerText = "SYSTEM MONITORING";
+                        statusEl.className = "status-badge state-monitoring";
                     }
                 }
             }
@@ -125,6 +142,8 @@
         function stopAlarm() {
             isAlarmActive = false;
             cooldownStartTime = 0;
+            countdown = 10.0;
+            timerEl.innerText = "10.0s";
             statusEl.innerText = "SYSTEM MONITORING";
             statusEl.className = "status-badge state-monitoring";
             if (alarmOsc) {
