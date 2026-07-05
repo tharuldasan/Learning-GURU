@@ -3,558 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AEGIS // Anti-Somnolence Interface</title>
+    <title>AEGIS // Visual Telemetry</title>
     <style>
         :root {
             --bg-deep: #030307;
             --panel-bg: rgba(10, 10, 20, 0.75);
-            --neon-purple: #bc13fe;
             --neon-cyan: #00ffff;
-            --alert-red: #ff0055;
             --text-main: #e2e8f0;
         }
 
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-deep);
-            color: var(--text-main);
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-image: 
-                linear-gradient(rgba(188, 19, 254, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(188, 19, 254, 0.03) 1px, transparent 1px);
-            background-size: 30px 30px;
-            overflow-x: hidden;
-        }
+        body { margin: 0; background: var(--bg-deep); color: var(--text-main); font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
 
-        /* --- CONFIGURATION HUB --- */
-        .config-container {
-            max-width: 600px;
-            margin: 10vh auto;
-            padding: 40px;
-            background: var(--panel-bg);
-            border: 1px solid rgba(188, 19, 254, 0.3);
-            border-radius: 12px;
-            box-shadow: 0 0 30px rgba(188, 19, 254, 0.15);
-            backdrop-filter: blur(10px);
-            text-align: center;
-        }
-
-        h1 {
-            font-family: 'Courier New', monospace;
-            font-size: 2.2rem;
-            letter-spacing: 4px;
-            color: var(--neon-cyan);
-            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
-            margin-bottom: 5px;
-            text-transform: uppercase;
-        }
-
-        .subtitle {
-            font-size: 0.9rem;
-            color: #718096;
-            letter-spacing: 1px;
-            margin-bottom: 30px;
-        }
-
-        .mode-selector {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-bottom: 25px;
-        }
-
-        .btn-mode {
-            padding: 12px 24px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(0, 255, 255, 0.2);
-            color: #fff;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: 0.2s ease;
-        }
-
-        .btn-mode.active, .btn-mode:hover {
-            background: rgba(0, 255, 255, 0.1);
-            border-color: var(--neon-cyan);
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
-        }
-
-        .input-group {
-            margin-bottom: 30px;
-            transition: all 0.3s ease;
-        }
-
-        input[type="text"] {
-            width: 80%;
-            padding: 12px 20px;
-            background: rgba(0,0,0,0.5);
-            border: 1px solid rgba(188, 19, 254, 0.4);
-            color: #fff;
-            border-radius: 6px;
-            font-size: 1rem;
-            outline: none;
-            text-align: center;
-        }
-
-        input[type="text"]:focus {
-            border-color: var(--neon-purple);
-            box-shadow: 0 0 15px rgba(188, 19, 254, 0.4);
-        }
-
-        .btn-launch {
-            padding: 15px 45px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            letter-spacing: 2px;
-            background: linear-gradient(135deg, var(--neon-purple), #8a0fd2);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            box-shadow: 0 0 20px rgba(188, 19, 254, 0.5);
-            text-transform: uppercase;
-        }
-
-        .btn-launch:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 0 35px rgba(188, 19, 254, 0.8);
-        }
-
-        /* --- DASHBOARD CONTROL CONSOLE --- */
-        .dashboard {
-            display: grid;
-            grid-template-columns: 1fr 350px;
-            gap: 25px;
-            max-width: 1400px;
-            margin: 20px auto;
-            padding: 0 20px;
-        }
-
-        .feed-panel {
-            background: var(--panel-bg);
-            border: 1px solid rgba(0, 255, 255, 0.15);
-            border-radius: 8px;
-            padding: 20px;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 500px;
-        }
-
-        #webcam {
-            width: 100%;
-            max-width: 800px;
-            border-radius: 6px;
-            border: 1px solid rgba(188, 19, 254, 0.3);
-            transform: scaleX(-1);
-        }
-
-        .telemetry-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .metric-card {
-            background: var(--panel-bg);
-            border: 1px solid rgba(188, 19, 254, 0.2);
-            border-radius: 8px;
-            padding: 20px;
-        }
-
-        .metric-title {
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: #a0aec0;
-            margin-bottom: 10px;
-        }
-
-        .metric-value {
-            font-size: 1.8rem;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-            color: var(--neon-cyan);
-        }
-
-        .telemetry-bar-container {
-            width: 100%;
-            height: 8px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 4px;
-            margin-top: 8px;
-            overflow: hidden;
-        }
-
-        .telemetry-bar {
-            height: 100%;
-            width: 0%;
-            background: var(--neon-cyan);
-            transition: width 0.1s linear;
-        }
-
-        .media-box {
-            grid-column: 1 / -1;
-            background: var(--panel-bg);
-            border: 1px solid rgba(255,255,255,0.05);
-            border-radius: 8px;
-            padding: 15px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-        }
-
-        .status-header {
-            grid-column: 1 / -1;
-            text-align: left;
-            font-family: 'Courier New', monospace;
-            color: #a0aec0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .pulse-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            background: #00ff00;
-            border-radius: 50%;
-            box-shadow: 0 0 10px #00ff00;
-        }
-
+        /* Dashboard Layout */
+        .dashboard { display: grid; grid-template-columns: 1fr 350px; gap: 20px; max-width: 1200px; margin: 20px auto; padding: 20px; }
+        
+        .feed-container { position: relative; background: var(--panel-bg); border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 8px; overflow: hidden; height: 480px; }
+        #webcam, #outputCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+        
+        .telemetry-panel { display: flex; flex-direction: column; gap: 20px; }
+        .metric-card { background: var(--panel-bg); border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 8px; padding: 20px; }
+        .metric-title { font-size: 0.8rem; color: #a0aec0; text-transform: uppercase; margin-bottom: 5px; }
+        .metric-value { font-size: 1.5rem; font-family: monospace; color: var(--neon-cyan); }
+        
+        .btn-launch { padding: 20px 40px; font-size: 1.5rem; background: var(--neon-cyan); color: #000; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; }
+        .center-screen { display: flex; justify-content: center; align-items: center; height: 100vh; }
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
-    <div id="configHub" class="config-container">
-        <h1>AEGIS SYSTEM INITIALIZATION</h1>
-        <div class="subtitle">AUTOMATED BIO-TRACKING & ATTENTION MONITOR</div>
-        
-        <div class="mode-selector">
-            <button id="modePresaved" class="btn-mode active">DEFAULT SOUND TRACK</button>
-            <button id="modeCustom" class="btn-mode">CUSTOM YOUTUBE STREAM</button>
-        </div>
-
-        <div id="urlInputGroup" class="input-group hidden">
-            <input type="text" id="ytUrl" placeholder="Paste full YouTube Link Here">
-        </div>
-
-        <button id="launchBtn" class="btn-launch">BOOT ARCHITECTURE</button>
+    <div id="startScreen" class="center-screen">
+        <button id="launchBtn" class="btn-launch">ACTIVATE VISUAL TELEMETRY</button>
     </div>
 
     <div id="dashboard" class="dashboard hidden">
-        <div class="status-header">
-            <span>SYS_STATUS: <span id="systemStatus" style="color:var(--neon-cyan)">INITIALIZING SYSTEM CAPACITIES...</span></span>
-            <span>HEARTBEAT <span class="pulse-indicator" id="pulse"></span></span>
-        </div>
-
-        <div class="feed-panel">
+        <div class="feed-container">
             <video id="webcam" autoplay playsinline></video>
+            <canvas id="outputCanvas"></canvas>
         </div>
 
         <div class="telemetry-panel">
             <div class="metric-card">
                 <div class="metric-title">Left Eyelid Aperture</div>
                 <div class="metric-value" id="leftApertureVal">0.00 mm</div>
-                <div class="telemetry-bar-container">
-                    <div id="leftBar" class="telemetry-bar"></div>
-                </div>
             </div>
-
             <div class="metric-card">
                 <div class="metric-title">Right Eyelid Aperture</div>
                 <div class="metric-value" id="rightApertureVal">0.00 mm</div>
-                <div class="telemetry-bar-container">
-                    <div id="rightBar" class="telemetry-bar"></div>
-                </div>
             </div>
-
             <div class="metric-card">
-                <div class="metric-title">Kinetic Velocity (Movement)</div>
-                <div class="metric-value" id="motionVal">STABLE</div>
-            </div>
-
-            <div class="metric-card" style="border-color: rgba(255, 0, 85, 0.2)">
-                <div class="metric-title" style="color: var(--alert-red)">Somnolence Countdown</div>
-                <div class="metric-value" id="countdownVal" style="color: var(--alert-red)">20.0s</div>
+                <div class="metric-title">Movement State</div>
+                <div class="metric-value" id="motionVal">CALIBRATING...</div>
             </div>
         </div>
-
-        <div class="media-box" id="mediaBox">
-            </div>
     </div>
 
     <script type="module">
-        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+        import { FaceLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
-        let faceLandmarker;
-        let video;
-        let lastVideoTime = -1;
-        let selectedVideoId = "4FdK9He8bLw"; // Default phonk mix
-        let useCustomUrl = false;
-
-        // Core Biometrics Tracking Architecture
-        let closedEyesStartTime = null;
-        let lastMoveTime = Date.now();
-        let lastNosePos = null;
-
-        // Audio Synthesis Config
-        let audioCtx;
-        let alarmOsc;
-        let isAlarmActive = false;
-        let alarmTicker;
-        const TRIGGER_THRESHOLD_MS = 20000; // 20 Seconds
-
-        // DOM Map
-        const configHub = document.getElementById('configHub');
-        const dashboard = document.getElementById('dashboard');
-        const modePresaved = document.getElementById('modePresaved');
-        const modeCustom = document.getElementById('modeCustom');
-        const urlInputGroup = document.getElementById('urlInputGroup');
-        const ytUrlInput = document.getElementById('ytUrl');
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('outputCanvas');
+        const ctx = canvas.getContext('2d');
         const launchBtn = document.getElementById('launchBtn');
-        const systemStatus = document.getElementById('systemStatus');
-        const mediaBox = document.getElementById('mediaBox');
+        const dashboard = document.getElementById('dashboard');
+        const startScreen = document.getElementById('startScreen');
         
-        // Live Telemetry Targets
+        let faceLandmarker;
+        let lastVideoTime = -1;
+
+        // UI Targets
         const leftApertureVal = document.getElementById('leftApertureVal');
         const rightApertureVal = document.getElementById('rightApertureVal');
-        const leftBar = document.getElementById('leftBar');
-        const rightBar = document.getElementById('rightBar');
         const motionVal = document.getElementById('motionVal');
-        const countdownVal = document.getElementById('countdownVal');
 
-        // Configuration Toggles
-        modePresaved.addEventListener('click', () => {
-            useCustomUrl = false;
-            modePresaved.classList.add('active');
-            modeCustom.classList.remove('active');
-            urlInputGroup.classList.add('hidden');
-        });
-
-        modeCustom.addEventListener('click', () => {
-            useCustomUrl = true;
-            modeCustom.classList.add('active');
-            modePresaved.classList.remove('active');
-            urlInputGroup.classList.remove('hidden');
-        });
-
-        function parseYoutubeId(url) {
-            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            const match = url.match(regExp);
-            return (match && match[2].length === 11) ? match[2] : null;
-        }
-
-        // System Initialization Trigger
         launchBtn.addEventListener('click', async () => {
-            if (useCustomUrl) {
-                const targetId = parseYoutubeId(ytUrlInput.value);
-                if (!targetId) {
-                    alert("Invalid System Target: Ensure your YouTube Link is correct.");
-                    return;
-                }
-                selectedVideoId = targetId;
-            }
-
-            // Move Interfaces smoothly
-            configHub.classList.add('hidden');
+            startScreen.classList.add('hidden');
             dashboard.classList.remove('hidden');
-            
-            // Allocate Native Audio Context Pipeline
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-            // INJECT VIDEO DYNAMICALLY USING YOUTUBE-NOCOOKIE (AD-BLOCKER BYPASS)
-            // By doing this exactly when the button is clicked, the browser grants it audio rights instantly.
-            mediaBox.innerHTML = `
-                <iframe 
-                    id="videoFrame" 
-                    width="100%" 
-                    height="240" 
-                    src="https://www.youtube-nocookie.com/embed/${selectedVideoId}?autoplay=1&enablejsapi=1&controls=1&loop=1&playlist=${selectedVideoId}" 
-                    frameborder="0" 
-                    allow="autoplay; encrypted-media" 
-                    allowfullscreen>
-                </iframe>`;
-                
-            systemStatus.innerText = "STREAM INJECTED // LOADING NEURAL COMPLIANCE LABELS...";
+            // Setup Camera
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+            };
 
-            // Initialize Camera System
-            video = document.getElementById('webcam');
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = stream;
-            } catch (err) {
-                systemStatus.innerText = "CRITICAL FAILURE // CAMERA ACCESS DENIED";
-                systemStatus.style.color = "var(--alert-red)";
-                return;
-            }
+            // Setup Mediapipe
+            const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+            faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
+                runningMode: "VIDEO",
+                outputFaceBlendshapes: true
+            });
 
-            // Launch Async Background Tracking Assembly
-            try {
-                const vision = await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-                );
-                faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-                    baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                        delegate: "GPU"
-                    },
-                    outputFaceBlendshapes: true,
-                    runningMode: "VIDEO",
-                    numFaces: 1
-                });
-
-                systemStatus.innerText = "SYSTEM ACTIVE // BIO-MONITOR OPERATION RUNNING";
-                systemStatus.style.color = "var(--neon-cyan)";
-                
-                video.addEventListener("loadeddata", initiateCoreAnalysisLoop);
-            } catch (err) {
-                systemStatus.innerText = "NEURAL PROCESSING MODEL PARSING FAILURE";
-                systemStatus.style.color = "var(--alert-red)";
-            }
+            renderLoop();
         });
 
-        function initiateCoreAnalysisLoop() {
-            async function renderLoop() {
-                if (video.currentTime !== lastVideoTime) {
-                    lastVideoTime = video.currentTime;
-                    if (faceLandmarker) {
-                        const results = faceLandmarker.detectForVideo(video, performance.now());
-                        processBiometricTelemetrics(results);
-                    }
-                }
-                requestAnimationFrame(renderLoop);
-            }
-            renderLoop();
-        }
-
-        function processBiometricTelemetrics(results) {
-            if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                const landmarks = results.faceLandmarks[0];
-                const blendshapes = results.faceBlendshapes[0].categories;
-
-                // Eyelid Math
-                const leftTop = landmarks[159], leftBot = landmarks[145];
-                const leftDistance = Math.sqrt(Math.pow(leftTop.x - leftBot.x, 2) + Math.pow(leftTop.y - leftBot.y, 2)) * 100;
-
-                const rightTop = landmarks[386], rightBot = landmarks[374];
-                const rightDistance = Math.sqrt(Math.pow(rightTop.x - rightBot.x, 2) + Math.pow(rightTop.y - rightBot.y, 2)) * 100;
-
-                leftApertureVal.innerText = `${leftDistance.toFixed(2)} mm`;
-                rightApertureVal.innerText = `${rightDistance.toFixed(2)} mm`;
-                leftBar.style.width = `${Math.min(leftDistance * 25, 100)}%`;
-                rightBar.style.width = `${Math.min(rightDistance * 25, 100)}%`;
-
-                // Nose Tracking
-                const nose = landmarks[1];
-                if (lastNosePos) {
-                    const movementDelta = Math.sqrt(Math.pow(nose.x - lastNosePos.x, 2) + Math.pow(nose.y - lastNosePos.y, 2));
-                    if (movementDelta > 0.0025) {
-                        lastMoveTime = Date.now();
-                        motionVal.innerText = "ACTIVE VELOCITY";
-                        motionVal.style.color = "var(--neon-cyan)";
-                    } else {
-                        motionVal.innerText = "ZERO KINETICS";
-                        motionVal.style.color = "orange";
-                    }
-                }
-                lastNosePos = nose;
-
-                // Eye State
-                let leftBlinkScore = 0, rightBlinkScore = 0;
-                for (const shape of blendshapes) {
-                    if (shape.categoryName === "eyeBlinkLeft") leftBlinkScore = shape.score;
-                    if (shape.categoryName === "eyeBlinkRight") rightBlinkScore = shape.score;
-                }
-
-                if (leftBlinkScore > 0.45 && rightBlinkScore > 0.45) {
-                    if (!closedEyesStartTime) closedEyesStartTime = Date.now();
+        function renderLoop() {
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                const results = faceLandmarker.detectForVideo(video, performance.now());
+                
+                // Clear Canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (results.faceLandmarks.length > 0) {
+                    const landmarks = results.faceLandmarks[0];
+                    const drawingUtils = new DrawingUtils(ctx);
+                    
+                    // Draw visual mesh
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {color: '#00ffff', lineWidth: 1});
+                    
+                    // Calculate Eyes
+                    const leftDist = Math.abs(landmarks[159].y - landmarks[145].y) * 1000;
+                    const rightDist = Math.abs(landmarks[386].y - landmarks[374].y) * 1000;
+                    
+                    leftApertureVal.innerText = `${leftDist.toFixed(2)} mm`;
+                    rightApertureVal.innerText = `${rightDist.toFixed(2)} mm`;
+                    motionVal.innerText = "DETECTED";
                 } else {
-                    closedEyesStartTime = null;
-                }
-
-                executeChronologyLogic();
-            } else {
-                closedEyesStartTime = null;
-                executeChronologyLogic();
-            }
-        }
-
-        function executeChronologyLogic() {
-            const totalEyesClosedDuration = closedEyesStartTime ? (Date.now() - closedEyesStartTime) : 0;
-            const absoluteStillDuration = Date.now() - lastMoveTime;
-
-            if (totalEyesClosedDuration > 0 || absoluteStillDuration > 2000) {
-                const maxRiskPeriod = Math.max(totalEyesClosedDuration, absoluteStillDuration);
-                const safetyMarginRemaining = Math.max(0, (TRIGGER_THRESHOLD_MS - maxRiskPeriod) / 1000);
-                countdownVal.innerText = `${safetyMarginRemaining.toFixed(1)}s`;
-            } else {
-                countdownVal.innerText = "20.0s";
-            }
-
-            if (totalEyesClosedDuration >= TRIGGER_THRESHOLD_MS && absoluteStillDuration >= TRIGGER_THRESHOLD_MS) {
-                activateStructuralSiren();
-            } else {
-                deactivateStructuralSiren();
-            }
-        }
-
-        function activateStructuralSiren() {
-            // Find dynamically created frame and pause it
-            const frame = document.getElementById('videoFrame');
-            if (frame && frame.contentWindow) {
-                try { frame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*'); } catch(e){}
-            }
-
-            if (isAlarmActive) return;
-            isAlarmActive = true;
-
-            document.body.style.backgroundColor = "#20000a";
-            systemStatus.innerText = "CRITICAL ALERT // ATTENTION LOSS DETECTED";
-            systemStatus.style.color = "var(--alert-red)";
-
-            alarmOsc = audioCtx.createOscillator();
-            alarmOsc.type = 'sawtooth';
-            alarmOsc.frequency.setValueAtTime(500, audioCtx.currentTime);
-
-            let gainNode = audioCtx.createGain();
-            gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
-
-            alarmOsc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            alarmOsc.start();
-
-            alarmTicker = setInterval(() => {
-                if (!isAlarmActive) return;
-                alarmOsc.frequency.value = alarmOsc.frequency.value === 500 ? 950 : 500;
-            }, 80);
-        }
-
-        function deactivateStructuralSiren() {
-            if (isAlarmActive) {
-                isAlarmActive = false;
-                document.body.style.backgroundColor = "";
-                systemStatus.innerText = "SYSTEM ACTIVE // BIO-MONITOR OPERATION RUNNING";
-                systemStatus.style.color = "var(--neon-cyan)";
-                clearInterval(alarmTicker);
-                if (alarmOsc) {
-                    try { alarmOsc.stop(); alarmOsc.disconnect(); } catch(e){}
-                }
-
-                // Find dynamically created frame and play it
-                const frame = document.getElementById('videoFrame');
-                if (frame && frame.contentWindow) {
-                    try { frame.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*'); } catch(e){}
+                    motionVal.innerText = "NO FACE FOUND";
                 }
             }
+            requestAnimationFrame(renderLoop);
         }
     </script>
 </body>
